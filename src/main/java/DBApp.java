@@ -1,3 +1,4 @@
+import java.beans.DesignMode;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
@@ -92,40 +93,39 @@ public class DBApp implements DBAppInterface {
 			e.printStackTrace();
 		}
 
-		boolean requireShift = false;
-		int currentPage = 1;
-		Hashtable<String, Object> row = null;
-		Vector<Hashtable<String, Object>> page = null;
-		int ii = 0;
-		Hashtable<String, Object> temp = null;
-		boolean found = false;
 		for (int i = 1; i <= t.getPageNum(); i++) {
-			page = deserialize(tableName, i);
+			Vector<Hashtable<String, Object>> page = deserialize(tableName, i);
 			Collections.reverse(page);
-			if (page.isEmpty())
+			boolean breakTable = false;
+			if (page.isEmpty()) {
+				// System.out.println(1);
 				page.add(colNameValue);
-			else
-				for (ii = 0; ii < page.size() && ii < 200; ii++) {
-					row = (Hashtable<String, Object>) page.get(ii);
+				breakTable = true;
+			} else {
+				for (int j = 0; j < page.size(); j++) {
+					Hashtable<String, Object> row = page.get(j);
 					if (Compare(colNameValue.get(primaryKey), row.get(primaryKey))) {
-						if (page.indexOf(page.lastElement()) >= 199) {
+						if (page.size() >= 199) {
+							System.out.println("if: "+i);
+							Hashtable<String, Object> temp = page.lastElement();
+							page.remove(temp);
+							page.add(j, colNameValue);
+							colNameValue = temp;
+							if (i == t.getPageNum())
+								t.addPage();
+						} else {
+							System.out.println("else:" + i);
+							page.add(j, colNameValue);
+							breakTable = true;
 							break;
 						}
-						found = true;
-						page.add(ii, colNameValue);
-						break;
 					}
 				}
+			}
 			Collections.reverse(page);
 			serialize(tableName, i, page);
-			if (found)
+			if (breakTable)
 				break;
-		}
-		if (page.size() == 200) {
-			t.addPage();
-		}
-		if (requireShift) {
-			shiftAfterInsert(t, currentPage,temp);
 		}
 
 	}
@@ -164,25 +164,25 @@ public class DBApp implements DBAppInterface {
 	public void shiftAfterInsert(Table t, int pageNum, Hashtable<String, Object> recordToShift) throws DBAppException {
 		if (recordToShift == null)
 			throw new DBAppException();
-		if(t.getPageNum() == pageNum) {
+		if (t.getPageNum() == pageNum) {
 			t.addPage();
 			System.out.println("page");
 		}
-		Vector v;
+		Vector<Hashtable<String, Object>> v;
 		v = deserialize(t.TableName, pageNum);
-		Collections.reverse(v);
+		// Collections.reverse(v);
 		Hashtable<String, Object> tempTerm;
 		if (v.size() == 200) {
 			tempTerm = (Hashtable<String, Object>) v.lastElement();
-			v.remove(v.firstElement());
-			v.add(v.size(), recordToShift);
-			//Collections.reverse(v);
+			v.remove(v.lastElement());
+			v.add(0, recordToShift);
+			// Collections.reverse(v);
 			serialize(t.TableName, pageNum, v);
 			shiftAfterInsert(t, pageNum + 1, tempTerm);
 		} else {
 			System.out.println("else");
-			v.add(v.size(), recordToShift);
-			Collections.reverse(v);
+			v.add(0, recordToShift);
+			// Collections.reverse(v);
 			serialize(t.TableName, pageNum, v);
 		}
 
@@ -278,17 +278,7 @@ public class DBApp implements DBAppInterface {
 
 			Vector<Hashtable<String, Object>> page = deserialize(tableName, i);
 			System.out.println(page.size());
-			for (Object o : page) {
-				@SuppressWarnings("unchecked")
-				Hashtable<String, Object> arr = (Hashtable<String, Object>) o;
-
-				Enumeration<Object> values = arr.elements();
-				System.out.println("------");
-				while (values.hasMoreElements()) {
-
-					System.out.println(values.nextElement());
-				}
-			}
+			System.out.println(page.toString());
 		}
 	}
 
@@ -337,31 +327,37 @@ public class DBApp implements DBAppInterface {
 		htblColNameMax.put("id", "10000");
 		htblColNameMax.put("name", "ZZZZZZZZZZZ");
 		htblColNameMax.put("gpa", "12");
+//
+		try {
 
-//		try {
-
-//			dbApp.createTable("Student", "id", htblColNameType, htblColNameMin, htblColNameMax);
-//			for (int i = 1; i <= 210; i++) {
-//				if(i==112)
-//					continue;
-//				Hashtable<String, Object> record = new Hashtable<String, Object>();
-//				record.put("gpa", 1.1);
-//				record.put("name", "name");
-//				record.put("id", i);
-//				dbApp.insertIntoTable("Student", record);
-//			}
+			dbApp.createTable("Student", "id", htblColNameType, htblColNameMin, htblColNameMax);
+			for (int i = 1; i <210; i++) {
+				
+				Hashtable<String, Object> record = new Hashtable<String, Object>();
+				record.put("gpa", 1.1);
+				record.put("name", "name");
+				record.put("id", i);
+				dbApp.insertIntoTable("Student", record);
+			}
 //			Hashtable<String, Object> record = new Hashtable<String, Object>();
 //			record.put("gpa", 1.1);
 //			record.put("name", "name");
-//			record.put("id", 112);
+//			record.put("id", 501);
 //			dbApp.insertIntoTable("Student", record);
-//			printTable("Student");
-//			
-//		} catch (DBAppException e) {
-//			System.out.println(e.getMessage());
-//
-//		}
-		printPage("Student", 2);
+			
+//			Hashtable<String, Object> record2 = new Hashtable<String, Object>();
+//			record2.put("gpa", 1.1);
+//			record2.put("name", "name");
+//			record2.put("id", 502);
+//			dbApp.insertIntoTable("Student", record2);
+			
+			printTable("Student");
+
+		} catch (DBAppException e) {
+			System.out.println(e.getMessage());
+
+		}
+		// printPage("Student",1);
 		// dbApp.insertIntoTable("Student", null);
 		// System.out.println(Compare(2, 1));
 	}

@@ -215,3 +215,6 @@ Student,id,java.lang.Integer,True,False,0,10000
 Student,gpa,java.lang.Double,False,False,0.7,12
 Student,name,java.lang.String,False,False,A,ZZZZZZZZZZZ
 Student,id,java.lang.Integer,True,False,0,10000
+Student,gpa,java.lang.Double,False,False,0.7,12
+Student,name,java.lang.String,False,False,A,ZZZZZZZZZZZ
+Student,id,java.lang.Integer,True,False,0,10000
