@@ -4,6 +4,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectOutputStream;
 import java.util.ArrayList;
+import java.util.Hashtable;
 import java.util.Vector;
 
 public class Table  {
@@ -20,21 +21,28 @@ public class Table  {
 		
 		if(!Table.exists()) {
 			Table.mkdir();
-			
+			try {
+				Vector<Page> pageList  = new Vector<Page>();
+				FileOutputStream f1 = new FileOutputStream("tables/"+this.TableName+"/PageList.class");
+				ObjectOutputStream out = new ObjectOutputStream(f1);
+				out.writeObject(pageList);
+				out.close();
+				f1.close();
+			} catch (IOException e) {
+				e.getMessage();
+			}
 		}
 		else {
 		}
-		if(getPageNum()==0) {
-			addPage();
-		}
+		
 
 	}
 
 	public  void addPage () {
 		try {
-			Vector vec  = new Vector();
+			Vector<Hashtable<String, Object>> vec  = new Vector<Hashtable<String, Object>>(200);
 			
-			int NumPage = getPageNum()+1; 
+			int NumPage = getPageNum(); 
 			FileOutputStream f1 = new FileOutputStream("tables/"+this.TableName+"/Page"+NumPage+".class");
 			ObjectOutputStream out = new ObjectOutputStream(f1);
 			out.writeObject(vec);
@@ -54,5 +62,16 @@ public class Table  {
 		myObj.delete();
 	}
 	
+	public void updatePageList(Vector<Page> pageList)
+	{
+		try {
+			FileOutputStream f1 = new FileOutputStream("tables/"+this.TableName+"/PageList.class");
+			ObjectOutputStream out = new ObjectOutputStream(f1);
+			out.writeObject(pageList);
+			out.close();
+		} catch (IOException i) {
+			i.printStackTrace();
+		}
+	}
 	
 }

@@ -38,8 +38,7 @@ public class DBApp implements DBAppInterface {
 		}
 
 		try {
-			@SuppressWarnings("unused")
-			Table t1 = new Table(tableName);
+			new Table(tableName);
 			StringBuilder sb = new StringBuilder();
 			Path pathToFile = Paths.get("src/main/resources/metadata.csv");
 			BufferedReader br = Files.newBufferedReader(pathToFile, StandardCharsets.US_ASCII);
@@ -78,6 +77,19 @@ public class DBApp implements DBAppInterface {
 
 	}
 
+	public void updatePageList(String tableName, Vector<Page> pageList)
+	{
+		try {
+			FileOutputStream f1 = new FileOutputStream("tables/"+tableName+"/PageList.class");
+			ObjectOutputStream out = new ObjectOutputStream(f1);
+			out.writeObject(pageList);
+			out.close();
+		} catch (IOException i) {
+			i.printStackTrace();
+		}
+	}
+	
+	
 	@Override
 	public void insertIntoTable(String tableName, Hashtable<String, Object> colNameValue) throws DBAppException {
 		if (!(new File("tables/" + tableName).exists()))
@@ -92,44 +104,121 @@ public class DBApp implements DBAppInterface {
 		} catch (ClassNotFoundException e) {
 			e.printStackTrace();
 		}
+		
 
-		for (int i = 1; i <= t.getPageNum(); i++) {
-			Vector<Hashtable<String, Object>> page = deserialize(tableName, i);
-			Collections.reverse(page);
-			boolean breakTable = false;
-			if (page.isEmpty()) {
-				// System.out.println(1);
-				page.add(colNameValue);
-				breakTable = true;
-			} else {
-				for (int j = 0; j < page.size(); j++) {
-					Hashtable<String, Object> row = page.get(j);
-					if (Compare(colNameValue.get(primaryKey), row.get(primaryKey))) {
-						if (page.size() >= 199) {
-							System.out.println("if: "+i);
-							Hashtable<String, Object> temp = page.lastElement();
-							page.remove(temp);
-							page.add(j, colNameValue);
-							colNameValue = temp;
-							if (i == t.getPageNum())
-								t.addPage();
-						} else {
-							System.out.println("else:" + i);
-							page.add(j, colNameValue);
-							breakTable = true;
-							break;
-						}
+		Vector<Page> pageList = deserializePageList("Student");
+
+		if(pageList.isEmpty())
+		{
+			t.addPage();
+			Vector<Hashtable<String, Object>> vec = deserialize(tableName, 1);
+			vec.add(colNameValue);
+			Page page = new Page("tables/" + tableName + "/Page" + 1 + ".class");
+			page.min = colNameValue.get(primaryKey);
+			page.max = colNameValue.get(primaryKey);
+			pageList.add(page);
+			serialize(tableName, 1, vec);
+			updatePageList(tableName, pageList);
+
+		}
+		else
+		{
+			
+				int i = (decidePage(pageList,colNameValue,primaryKey));
+				
+					Vector<Hashtable<String, Object>> page = deserializePage(pageList.get(i).path);
+					if(page.size()>199) {
+						Page page2 = new Page("tables/"+tableName+"/Page"+(i+2)+".class");
+						t.addPage();
+						
+						
+						Vector<Hashtable<String, Object>> vec = deserialize(tableName, t.getPageNum()-1);
+						//vec.add(colNameValue);
+						Vector<Vector<Hashtable<String, Object>>> temp = split(page,colNameValue,primaryKey);
+						page2.min = temp.get(1).firstElement().get(primaryKey);
+						page2.max = temp.get(1).lastElement().get(primaryKey);
+						page2.size = temp.get(1).size();
+						pageList.get(i).min = temp.get(0).firstElement().get(primaryKey);
+						pageList.get(i).max = temp.get(0).lastElement().get(primaryKey);
+						pageList.get(i).size = temp.get(0).size();
+						pageList.add(i,page2);
+						Page tempPage = pageList.get(i+1);
+						pageList.remove(tempPage);
+						pageList.add(i,tempPage);
+						serialize(page2.path,temp.get(1));
+						serialize(pageList.get(i).path, temp.get(0));
+						t.updatePageList(pageList);
+						
+					}
+					else {
+						page.add(colNameValue);
+						Vector<Hashtable<String, Object>> newPage = sortVector(page, primaryKey);
+						pageList.get(i).min = newPage.firstElement().get(primaryKey);
+						pageList.get(i).max = newPage.lastElement().get(primaryKey);
+						pageList.get(i).size = newPage.size();
+						serialize(pageList.get(i).path, newPage);
+						t.updatePageList(pageList);
 					}
 				}
-			}
-			Collections.reverse(page);
-			serialize(tableName, i, page);
-			if (breakTable)
+			
+		
+		
+	}
+	
+	private int decidePage(Vector<Page> pageList, Hashtable<String, Object> colNameValue, String primaryKey) {
+		// TODO Auto-generated method stub
+		int i = -1;
+		for (int ii = 0; ii < pageList.size(); ii++) {
+			if(Compare(colNameValue.get(primaryKey), pageList.get(ii).min))
+				i++;
+			else
 				break;
 		}
-
+		
+		return i;
 	}
 
+	public static Vector<Vector<Hashtable<String, Object>>>  split (Vector<Hashtable<String, Object>> page, Hashtable<String, Object> record, String primaryKey) throws DBAppException{
+		page.add(record);
+
+		page = sortVector(page, primaryKey);
+		Vector<Vector<Hashtable<String,Object>>>  res = new Vector<Vector<Hashtable<String,Object>>>(2) ;
+		res.add(new Vector<Hashtable<String, Object>>());
+		res.add(new Vector<Hashtable<String, Object>>());
+		for (int i = 0; i < page.size(); i++) {
+			if(i<page.size()/2) {
+				res.get(0).add(page.get(i));
+			}
+			else
+				res.get(1).add(page.get(i));
+			
+		}
+		return res;
+	}
+	
+	
+	
+	
+	
+	public static Vector<Hashtable<String, Object>> sortVector(Vector<Hashtable<String, Object>> vec, Object primaryKey) throws DBAppException
+	{
+		boolean sorted = false;
+	    Hashtable<String, Object> temp;
+	    while(!sorted) {
+	        sorted = true;
+	        for (int i = 0; i < vec.size() - 1; i++) {
+				if (Compare(vec.get(i).get(primaryKey), vec.get(i+1).get(primaryKey))) {
+	                temp =  vec.get(i);
+	                vec.remove(temp);
+	                vec.add(i+1,temp);
+	                sorted = false;
+	            }
+	        }
+	    }
+	    
+	    return vec;
+	}
+	
 	public String verifyColumnTypes(String tableName, Hashtable<String, Object> colNameValue, TableContent content)
 			throws ClassNotFoundException, DBAppException {
 		@SuppressWarnings("unused")
@@ -159,33 +248,6 @@ public class DBApp implements DBAppInterface {
 			}
 		}
 		return key;
-	}
-
-	public void shiftAfterInsert(Table t, int pageNum, Hashtable<String, Object> recordToShift) throws DBAppException {
-		if (recordToShift == null)
-			throw new DBAppException();
-		if (t.getPageNum() == pageNum) {
-			t.addPage();
-			System.out.println("page");
-		}
-		Vector<Hashtable<String, Object>> v;
-		v = deserialize(t.TableName, pageNum);
-		// Collections.reverse(v);
-		Hashtable<String, Object> tempTerm;
-		if (v.size() == 200) {
-			tempTerm = (Hashtable<String, Object>) v.lastElement();
-			v.remove(v.lastElement());
-			v.add(0, recordToShift);
-			// Collections.reverse(v);
-			serialize(t.TableName, pageNum, v);
-			shiftAfterInsert(t, pageNum + 1, tempTerm);
-		} else {
-			System.out.println("else");
-			v.add(0, recordToShift);
-			// Collections.reverse(v);
-			serialize(t.TableName, pageNum, v);
-		}
-
 	}
 
 	public boolean minMaxCheck(String min, String max, String value) {
@@ -257,7 +319,59 @@ public class DBApp implements DBAppInterface {
 		}
 		return page;
 	}
+	
+	public static Vector<Hashtable<String, Object>> deserializePage(String path) {
+		Vector<Hashtable<String, Object>> page = null;
+		try {
+			FileInputStream fileIn = new FileInputStream(path);
+			ObjectInputStream in = new ObjectInputStream(fileIn);
+			page = (Vector<Hashtable<String, Object>>) in.readObject();
+			in.close();
+			fileIn.close();
+		} catch (IOException i) {
+			i.printStackTrace();
+		} catch (ClassNotFoundException c) {
 
+			c.printStackTrace();
+
+		}
+		return page;
+	}
+	
+	@SuppressWarnings("unchecked")
+	public static Vector<Page> deserializePageList(String tableName) {
+		
+		Vector<Page> pageList = null;
+		try {
+			FileInputStream fileIn = new FileInputStream("tables/" + tableName + "/PageList.class");
+			ObjectInputStream in = new ObjectInputStream(fileIn);
+			pageList = (Vector<Page>) in.readObject();
+			in.close();
+			fileIn.close();
+		} catch (IOException i) {
+			i.printStackTrace();
+		} catch (ClassNotFoundException c) {
+
+			c.printStackTrace();
+
+		}
+		return pageList;
+		
+		
+	}
+	
+	public static void serialize(String path, Vector<Hashtable<String, Object>> v) {
+		try {
+			FileOutputStream fileOut = new FileOutputStream(path);
+			ObjectOutputStream out = new ObjectOutputStream(fileOut);
+			out.writeObject(v);
+			out.close();
+			fileOut.close();
+		} catch (IOException i) {
+			i.printStackTrace();
+		}
+	}
+	
 	public static void serialize(String tableName, int pageNum, Vector<Hashtable<String, Object>> v) {
 		try {
 			FileOutputStream fileOut = new FileOutputStream("tables/" + tableName + "/Page" + pageNum + ".class");
@@ -271,16 +385,15 @@ public class DBApp implements DBAppInterface {
 	}
 
 	public static void printTable(String tableName) throws DBAppException {
-		Table t = new Table(tableName);
+		Vector<Page> v = deserializePageList(tableName);
+		for (int i = 0; i < v.size(); i++) {
 
-		int numOfPages = t.getPageNum();
-		for (int i = 1; i <= numOfPages; i++) {
-
-			Vector<Hashtable<String, Object>> page = deserialize(tableName, i);
+			Vector<Hashtable<String, Object>> page = deserializePage(v.get(i).path);
 			System.out.println(page.size());
 			System.out.println(page.toString());
 		}
 	}
+
 
 	public static void printPage(String tableName, int pageNum) {
 		Vector<Hashtable<String, Object>> page = deserialize(tableName, pageNum);
@@ -305,7 +418,7 @@ public class DBApp implements DBAppInterface {
 			return ((int) newEntry) < ((int) lastEntry);
 		else if (newEntry instanceof Double)
 			return new BigDecimal((double) newEntry).compareTo(new BigDecimal((double) lastEntry)) < 0;
-		else
+		else 
 			return ((Date) newEntry).compareTo((Date) lastEntry) < 0;
 
 	}
@@ -327,11 +440,20 @@ public class DBApp implements DBAppInterface {
 		htblColNameMax.put("id", "10000");
 		htblColNameMax.put("name", "ZZZZZZZZZZZ");
 		htblColNameMax.put("gpa", "12");
-//
+		
 		try {
-
 			dbApp.createTable("Student", "id", htblColNameType, htblColNameMin, htblColNameMax);
-			for (int i = 1; i <210; i++) {
+			for (int i = 1; i <=500; i++) {
+				if(i>200 && i<300)
+					continue;
+				Hashtable<String, Object> record = new Hashtable<String, Object>();
+				record.put("gpa", 1.1);
+				record.put("name", "name");
+				record.put("id", i);
+				dbApp.insertIntoTable("Student", record);
+			}
+		
+			for (int i = 201; i <=299; i++) {
 				
 				Hashtable<String, Object> record = new Hashtable<String, Object>();
 				record.put("gpa", 1.1);
@@ -339,17 +461,6 @@ public class DBApp implements DBAppInterface {
 				record.put("id", i);
 				dbApp.insertIntoTable("Student", record);
 			}
-//			Hashtable<String, Object> record = new Hashtable<String, Object>();
-//			record.put("gpa", 1.1);
-//			record.put("name", "name");
-//			record.put("id", 501);
-//			dbApp.insertIntoTable("Student", record);
-			
-//			Hashtable<String, Object> record2 = new Hashtable<String, Object>();
-//			record2.put("gpa", 1.1);
-//			record2.put("name", "name");
-//			record2.put("id", 502);
-//			dbApp.insertIntoTable("Student", record2);
 			
 			printTable("Student");
 
@@ -357,9 +468,7 @@ public class DBApp implements DBAppInterface {
 			System.out.println(e.getMessage());
 
 		}
-		// printPage("Student",1);
-		// dbApp.insertIntoTable("Student", null);
-		// System.out.println(Compare(2, 1));
+
 	}
 
 }
