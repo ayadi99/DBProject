@@ -12,6 +12,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.Collections;
 import java.util.Date;
 import java.util.Enumeration;
@@ -19,6 +21,8 @@ import java.util.Hashtable;
 import java.util.Iterator;
 import java.util.TreeMap;
 import java.util.Vector;
+
+
 
 public class DBApp implements DBAppInterface {
 
@@ -100,8 +104,11 @@ public class DBApp implements DBAppInterface {
 		try {
 			primaryKey = verifyColumnTypes(tableName, colNameValue, content);
 			if (primaryKey.equals("-1"))
-				throw new DBAppException();
+				throw new DBAppException("Wrong type");
 		} catch (ClassNotFoundException e) {
+			e.printStackTrace();
+		} catch (ParseException e) {
+			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		
@@ -165,7 +172,7 @@ public class DBApp implements DBAppInterface {
 		
 	}
 	
-	private int decidePage(Vector<Page> pageList, Hashtable<String, Object> colNameValue, String primaryKey) {
+	private int decidePage(Vector<Page> pageList, Hashtable<String, Object> colNameValue, String primaryKey) throws DBAppException {
 		// TODO Auto-generated method stub
 		int i = -1;
 		for (int ii = 0; ii < pageList.size(); ii++) {
@@ -220,7 +227,7 @@ public class DBApp implements DBAppInterface {
 	}
 	
 	public String verifyColumnTypes(String tableName, Hashtable<String, Object> colNameValue, TableContent content)
-			throws ClassNotFoundException, DBAppException {
+			throws ClassNotFoundException, DBAppException, ParseException {
 		@SuppressWarnings("unused")
 		String primaryKeyColumn = "";
 		String key = "";
@@ -233,8 +240,8 @@ public class DBApp implements DBAppInterface {
 			while (i < content.columns.size()) {
 				if (key.equals(content.columns.get(i).name)) {
 					if ((checkType(obj, content.columns.get(i).type))) {
-//							if(!minMaxCheck(content.columns.get(i).min, content.columns.get(i).max, obj.toString()))
-//								throw new DBAppException("value is out of range");
+							if(!minmax(content.columns.get(i).min, content.columns.get(i).max, obj.toString(), content.columns.get(i).type))
+								throw new DBAppException("value is out of range");
 						if (content.columns.get(i).isCluster.equals("True")) {
 							primaryKeyColumn = key;
 						}
@@ -250,11 +257,11 @@ public class DBApp implements DBAppInterface {
 		return key;
 	}
 
-	public boolean minMaxCheck(String min, String max, String value) {
-		return (min.compareToIgnoreCase(value) < 0) && (max.compareToIgnoreCase(value) > 0)
-				&& (min.length() <= value.length()) && (max.length() >= value.length());
-
-	}
+//	public boolean minMaxCheck(String min, String max, String value) {
+//		return (min.compareToIgnoreCase(value) < 0) && (max.compareToIgnoreCase(value) > 0)
+//				&& (min.length() <= value.length()) && (max.length() >= value.length());
+//
+//	}
 
 	@Override
 	public void updateTable(String tableName, String clusteringKeyValue, Hashtable<String, Object> columnNameValue)
@@ -411,18 +418,64 @@ public class DBApp implements DBAppInterface {
 		}
 	}
 
-	public static boolean Compare(Object lastEntry, Object newEntry) {
+	public static boolean Compare(Object lastEntry, Object newEntry) throws DBAppException{
 		if (newEntry instanceof String)
 			return ((String) newEntry).compareToIgnoreCase((String) lastEntry) < 0;
 		else if (newEntry instanceof Integer)
 			return ((int) newEntry) < ((int) lastEntry);
 		else if (newEntry instanceof Double)
 			return new BigDecimal((double) newEntry).compareTo(new BigDecimal((double) lastEntry)) < 0;
-		else 
+		else if (newEntry instanceof Date)
 			return ((Date) newEntry).compareTo((Date) lastEntry) < 0;
+		else
+			throw new DBAppException("Cannot typecast!!");
 
 	}
-
+public static boolean minmax(String min, String max, String value, String type) throws ClassNotFoundException, ParseException {
+		boolean flag = false;
+		Class x = Class.forName(type);
+		if(x.getSimpleName().equals("Integer")) {
+			Integer min2 = Integer.valueOf(min);
+			Integer max2 = Integer.valueOf(max);
+			Integer value2= Integer.valueOf(value);
+			if(min2<=value2 && value2<=max2) {
+				flag = true;
+			}
+		}
+		if(x.getSimpleName().equals("Date")) {
+			Date min2 = new SimpleDateFormat("yyyy-mm-dd").parse(min);
+			Date max2 = new SimpleDateFormat("yyyy-mm-dd").parse(max);
+			Date value2= new SimpleDateFormat("EEE MMM DD HH:mm:ss Z YYYY").parse(value);
+			min2.setHours(0);
+			min2.setSeconds(0);
+			min2.setMinutes(0);
+			max2.setHours(0);
+			max2.setSeconds(0);
+			max2.setMinutes(0);
+			value2.setHours(0);
+			value2.setSeconds(0);
+			value2.setMinutes(0);
+			if(value2.compareTo(min2)>=0&&value2.compareTo(max2)<=0) {
+				flag = true;
+			}
+		}
+		if(x.getSimpleName().equals("Double")) {
+			Double min2 = Double.valueOf(min);
+			Double max2 = Double.valueOf(max);
+			Double value2= Double.valueOf(value);
+			if(min2<=value2 && value2<=max2) {
+				flag = true;
+			}
+		}
+		if(x.getSimpleName().equals("String")) {
+			if((min.length() <= value.length()) && (max.length() >= value.length())) {
+				flag = true;
+			}
+			else if ((min.compareToIgnoreCase(value) <= 0) && (max.compareToIgnoreCase(value) >= 0))
+				flag = true;
+		}
+		return flag;
+	}
 	public static void main(String a[]) throws Exception {
 
 		DBApp dbApp = new DBApp();
@@ -442,25 +495,14 @@ public class DBApp implements DBAppInterface {
 		htblColNameMax.put("gpa", "12");
 		
 		try {
-			dbApp.createTable("Student", "id", htblColNameType, htblColNameMin, htblColNameMax);
-			for (int i = 1; i <=500; i++) {
-				if(i>200 && i<300)
-					continue;
+			//dbApp.createTable("Student", "id", htblColNameType, htblColNameMin, htblColNameMax);
 				Hashtable<String, Object> record = new Hashtable<String, Object>();
-				record.put("gpa", 1.1);
+				record.put("gpa", 1.0);
 				record.put("name", "name");
-				record.put("id", i);
+				record.put("id", 20000);
 				dbApp.insertIntoTable("Student", record);
-			}
+			
 		
-			for (int i = 201; i <=299; i++) {
-				
-				Hashtable<String, Object> record = new Hashtable<String, Object>();
-				record.put("gpa", 1.1);
-				record.put("name", "name");
-				record.put("id", i);
-				dbApp.insertIntoTable("Student", record);
-			}
 			
 			printTable("Student");
 
