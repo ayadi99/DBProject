@@ -1,41 +1,63 @@
-import java.beans.DesignMode;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.math.BigDecimal;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.Collections;
-import java.util.Date;
-import java.util.Enumeration;
-import java.util.Hashtable;
-import java.util.Iterator;
-import java.util.TreeMap;
-import java.util.Vector;
+import java.util.*;
+import java.util.Map.Entry;
 
 
 
 public class DBApp implements DBAppInterface {
-
+	int maxPageSize;
+	final static String relativePath = "src/main/resources/data/";
 	@Override
 	public void init() {
-		// TODO Auto-generated method stub
+		File ParentFile = new File(relativePath);
+		
+		if(!ParentFile.exists()) {
+			ParentFile.mkdir();
+		}
+		Properties prop = new Properties();
+        try {
+            // the configuration file name
+            String fileName = "DBApp.config";
+            ClassLoader classLoader = DBApp.class.getClassLoader();
+
+            // Make sure that the configuration file exists
+            URL res = Objects.requireNonNull(classLoader.getResource(fileName),
+                "Can't find configuration file DBApp.config");
+
+            InputStream is = new FileInputStream(res.getFile());
+
+            // load the properties file
+            prop.load(is);
+
+            // get the value for app.name key
+            maxPageSize = Integer.parseInt(prop.getProperty("MaximumRowsCountinPage"));
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
 
 	}
 
 	@Override
 	public void createTable(String tableName, String clusteringKey, Hashtable<String, String> colNameType,
 			Hashtable<String, String> colNameMin, Hashtable<String, String> colNameMax) throws DBAppException {
-		File tableCheck = new File("tables/" + tableName);
+		File tableCheck = new File(relativePath + tableName);
 		if (tableCheck.exists()) {
 			throw new DBAppException("a table with same name already exists");
 
@@ -77,14 +99,14 @@ public class DBApp implements DBAppInterface {
 
 	@Override
 	public void createIndex(String tableName, String[] columnNames) throws DBAppException {
-		// TODO Auto-generated method stub
+	
 
 	}
 
 	public void updatePageList(String tableName, Vector<Page> pageList)
 	{
 		try {
-			FileOutputStream f1 = new FileOutputStream("tables/"+tableName+"/PageList.class");
+			FileOutputStream f1 = new FileOutputStream(relativePath+tableName+"/PageList.class");
 			ObjectOutputStream out = new ObjectOutputStream(f1);
 			out.writeObject(pageList);
 			out.close();
@@ -96,31 +118,34 @@ public class DBApp implements DBAppInterface {
 	
 	@Override
 	public void insertIntoTable(String tableName, Hashtable<String, Object> colNameValue) throws DBAppException {
-		if (!(new File("tables/" + tableName).exists()))
+		if (!(new File(relativePath + tableName).exists()))
 			throw new DBAppException("table doesnt exist");
 		Table t = new Table(tableName);
 		TableContent content = new TableContent(tableName);
 		String primaryKey = "";
 		try {
+			if(colNameValue.size() != content.columns.size())
+				throw new DBAppException("missing attribute");
 			primaryKey = verifyColumnTypes(tableName, colNameValue, content);
-			if (primaryKey.equals("-1"))
+			if (primaryKey.equals("-1")) {
 				throw new DBAppException("Wrong type");
+			}
+				
 		} catch (ClassNotFoundException e) {
 			e.printStackTrace();
 		} catch (ParseException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		
 
-		Vector<Page> pageList = deserializePageList("Student");
+		Vector<Page> pageList = deserializePageList(tableName);
 
 		if(pageList.isEmpty())
 		{
 			t.addPage();
 			Vector<Hashtable<String, Object>> vec = deserialize(tableName, 1);
 			vec.add(colNameValue);
-			Page page = new Page("tables/" + tableName + "/Page" + 1 + ".class");
+			Page page = new Page(relativePath + tableName + "/Page" + 1 + ".class");
 			page.min = colNameValue.get(primaryKey);
 			page.max = colNameValue.get(primaryKey);
 			pageList.add(page);
@@ -130,12 +155,12 @@ public class DBApp implements DBAppInterface {
 		}
 		else
 		{
-			
+				
 				int i = (decidePage(pageList,colNameValue,primaryKey));
 				
 					Vector<Hashtable<String, Object>> page = deserializePage(pageList.get(i).path);
-					if(page.size()>199) {
-						Page page2 = new Page("tables/"+tableName+"/Page"+(i+2)+".class");
+					if(page.size()>maxPageSize-1) {
+						Page page2 = new Page(relativePath+tableName+"/Page"+(i+2)+".class");
 						t.addPage();
 						
 						
@@ -173,9 +198,8 @@ public class DBApp implements DBAppInterface {
 	}
 	
 	private int decidePage(Vector<Page> pageList, Hashtable<String, Object> colNameValue, String primaryKey) throws DBAppException {
-		// TODO Auto-generated method stub
-		int i = -1;
-		for (int ii = 0; ii < pageList.size(); ii++) {
+		int i = 0;
+		for (int ii = 0; ii < pageList.size()-1; ii++) {
 			if(Compare(colNameValue.get(primaryKey), pageList.get(ii).min))
 				i++;
 			else
@@ -228,6 +252,8 @@ public class DBApp implements DBAppInterface {
 	
 	public String verifyColumnTypes(String tableName, Hashtable<String, Object> colNameValue, TableContent content)
 			throws ClassNotFoundException, DBAppException, ParseException {
+		
+		
 		@SuppressWarnings("unused")
 		String primaryKeyColumn = "";
 		String key = "";
@@ -235,14 +261,15 @@ public class DBApp implements DBAppInterface {
 		while (keys.hasMoreElements()) {
 			key = keys.nextElement();
 			Object obj = colNameValue.get(key);
-			// check types
+
 			int i = 0;
 			while (i < content.columns.size()) {
 				if (key.equals(content.columns.get(i).name)) {
 					if ((checkType(obj, content.columns.get(i).type))) {
 							if(!minmax(content.columns.get(i).min, content.columns.get(i).max, obj.toString(), content.columns.get(i).type))
-								throw new DBAppException("value is out of range");
-						if (content.columns.get(i).isCluster.equals("True")) {
+								throw new DBAppException("The value is out of range");
+
+						if ((Boolean.parseBoolean(content.columns.get(i).isCluster.toLowerCase()))) {
 							primaryKeyColumn = key;
 						}
 					} else
@@ -254,44 +281,137 @@ public class DBApp implements DBAppInterface {
 				i++;
 			}
 		}
-		return key;
+
+		return primaryKeyColumn;
 	}
 
-//	public boolean minMaxCheck(String min, String max, String value) {
-//		return (min.compareToIgnoreCase(value) < 0) && (max.compareToIgnoreCase(value) > 0)
-//				&& (min.length() <= value.length()) && (max.length() >= value.length());
-//
-//	}
 
-	@Override
-	public void updateTable(String tableName, String clusteringKeyValue, Hashtable<String, Object> columnNameValue)
-			throws DBAppException {
-		// TODO Auto-generated method stub
+public void updateTable(String tableName, String clusteringKeyValue, Hashtable<String, Object> columnNameValue) throws DBAppException {
+		
 
-	}
+		if(clusteringKeyValue.charAt(0) == '0')
+			clusteringKeyValue = Integer.parseInt(clusteringKeyValue) + "";
+		
+		Table tableReferance = new Table(tableName);
+		TableContent TC = new TableContent(tableName);
+		Vector<Page> pageList = deserializePageList(tableName);
+	
+			boolean pKeyNotFound = true;
+			
+			for(int pageIndex = 0; pageIndex < pageList.size(); pageIndex++)
+			{
+		        Vector<Hashtable<String, Object>> vec = deserializePage(pageList.get(pageIndex).path);
+		     	        
+		        for(int  i = 0 ; i < vec.size(); i++)
+		        {
+		        	Hashtable<String,Object> arrHtbl = vec.get(i);
+		        	boolean flag = false;
+		        	
+		        			      		        	
+		        	Enumeration<String> keys1  = arrHtbl.keys();
+		        	while(keys1.hasMoreElements())
+		        	{
+		        				String value;
+		        	            String key = keys1.nextElement();
+		        	            if(arrHtbl.get(key) instanceof Date)
+		        	            {		        	            	
+		        	            	value = dateToString((Date)arrHtbl.get(key));
+		        	            }		        	            
+		        	            	
+		        	            else
+		        	            	value = arrHtbl.get(key) + ""; //WE CHANGED THIS FROM STRING TO OBJECT
+		        	            
+		        	            
+		        	            
+		        	            if(key.equals(TC.getPrimaryKey(tableName)) && (value.equals(clusteringKeyValue)))
+		        	            {	
+		        	            	
+		        	            	flag = true;
+		        	            	pKeyNotFound = false;
+				        			break;
+		        	            }
+		        	}
+		        	
+		        	Enumeration<String> keys2  = arrHtbl.keys();
+		        	
+		        	if(flag)
+		        	{		       			        	
+	        	         Enumeration<String> keys  = columnNameValue.keys();
+	        	         
+	        	         while(keys.hasMoreElements())
+	        	         {
+	        	        	 String key = keys.nextElement();
+	        	        	 if(!arrHtbl.containsKey(key))
+	        	        	 {
+	        	        		 throw new DBAppException("Invalid Column Name");
+	        	        	 }
+			        		 Object value = columnNameValue.get(key);
+		        	         arrHtbl.replace(key, value);
+
+	        	         }
+
+	        	         serialize(pageList.get(pageIndex).path,vec);
+		        	}		        	
+			     
+	           }
+		    }
+			
+			if(pKeyNotFound)
+				throw new DBAppException("Record not found");
+			
+			}
+			
+
 
 	@Override
 	public void deleteFromTable(String tableName, Hashtable<String, Object> columnNameValue) throws DBAppException {
 		Table t = new Table(tableName);
-		Vector<Hashtable<String, Object>> row;
-
-		if (t.getPageNum() == 0 || t == null) { // if deleting from page with no rows or table with no pages
-			throw new DBAppException();
+		Vector<Hashtable<String, Object>> page;
+		Vector<Page> pageList = deserializePageList(tableName);
+		TableContent content = new TableContent(tableName);
+		Set<Entry<String, Object>> record = columnNameValue.entrySet();
+		
+		boolean removed = false;
+		if (!(new File(relativePath + tableName).exists()))
+			throw new DBAppException("table doesnt exist");
+		String primaryKey = "";
+		try {
+			primaryKey = verifyColumnTypes(tableName, columnNameValue, content);
+			
+		} catch (ClassNotFoundException | ParseException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		if(primaryKey.equals("-1"))
+			throw new DBAppException("Type mismatch");
+		
+		if (pageList.isEmpty()) { // if deleting from page with no rows or table with no pages
+			throw new DBAppException("Table is empty");
 		} else {
-			for (int i = 1; i <= t.getPageNum(); i++) { // looping on each page
-				row = deserialize(tableName, i);
-
-				for (int j = 0; j < row.size(); j++) { // looping on each row ""check"
-					TreeMap<String, Object> map = new TreeMap<String, Object>(row.get(j));
-					if ((map).equals(columnNameValue)) { // find the key and the value
-						if (row.size() == 1) { // if 1 vector with 1 record
-							row.remove(j);
-							t.deletePage(i);
-						} else {
-							row.remove(j);
+			for (int i = 0; i < pageList.size(); i++) { // looping on each page
+				
+				if(i>= pageList.size()) {
+					throw new DBAppException("record not in table");
+				}
+				
+				page = deserializePage(pageList.get(i).path);
+				
+				for (int j = 0; j < page.size(); j++) 
+				{ 
+					Set<Entry<String, Object>> row = page.get(j).entrySet();
+					if(row.containsAll(record))
+					{
+						removed = true;
+						page.remove(j);
+						if(page.isEmpty())
+						{
+							t.deletePage(pageList.get(i).path);
+							pageList.remove(i);
+							t.updatePageList(pageList);
 						}
+						else
+							serialize(pageList.get(i).path, page);
 					}
-					serialize(tableName, i, row);
 				}
 			}
 		}
@@ -312,7 +432,7 @@ public class DBApp implements DBAppInterface {
 	public static Vector<Hashtable<String, Object>> deserialize(String tableName, int pageNum) {
 		Vector<Hashtable<String, Object>> page = null;
 		try {
-			FileInputStream fileIn = new FileInputStream("tables/" + tableName + "/Page" + pageNum + ".class");
+			FileInputStream fileIn = new FileInputStream( relativePath+ tableName + "/Page" + pageNum + ".class");
 			ObjectInputStream in = new ObjectInputStream(fileIn);
 			page = (Vector<Hashtable<String, Object>>) in.readObject();
 			in.close();
@@ -350,7 +470,7 @@ public class DBApp implements DBAppInterface {
 		
 		Vector<Page> pageList = null;
 		try {
-			FileInputStream fileIn = new FileInputStream("tables/" + tableName + "/PageList.class");
+			FileInputStream fileIn = new FileInputStream(relativePath + tableName + "/PageList.class");
 			ObjectInputStream in = new ObjectInputStream(fileIn);
 			pageList = (Vector<Page>) in.readObject();
 			in.close();
@@ -381,7 +501,7 @@ public class DBApp implements DBAppInterface {
 	
 	public static void serialize(String tableName, int pageNum, Vector<Hashtable<String, Object>> v) {
 		try {
-			FileOutputStream fileOut = new FileOutputStream("tables/" + tableName + "/Page" + pageNum + ".class");
+			FileOutputStream fileOut = new FileOutputStream(relativePath + tableName + "/Page" + pageNum + ".class");
 			ObjectOutputStream out = new ObjectOutputStream(fileOut);
 			out.writeObject(v);
 			out.close();
@@ -418,20 +538,32 @@ public class DBApp implements DBAppInterface {
 		}
 	}
 
-	public static boolean Compare(Object lastEntry, Object newEntry) throws DBAppException{
-		if (newEntry instanceof String)
-			return ((String) newEntry).compareToIgnoreCase((String) lastEntry) < 0;
-		else if (newEntry instanceof Integer)
+	public static boolean Compare(Object lastEntry, Object newEntry) throws DBAppException {
+		int res;
+		if (newEntry instanceof String) {
+			res = ((String) newEntry).compareToIgnoreCase((String) lastEntry);
+			if (res == 0)
+				throw new DBAppException("primary key already in database");
+			return res < 0;
+		} else if (newEntry instanceof Integer) {
+			if (((int) newEntry) == ((int) lastEntry))
+				throw new DBAppException("primary key already in database");
 			return ((int) newEntry) < ((int) lastEntry);
-		else if (newEntry instanceof Double)
-			return new BigDecimal((double) newEntry).compareTo(new BigDecimal((double) lastEntry)) < 0;
-		else if (newEntry instanceof Date)
-			return ((Date) newEntry).compareTo((Date) lastEntry) < 0;
-		else
-			throw new DBAppException("Cannot typecast!!");
+		} else if (newEntry instanceof Double) {
+			res = new BigDecimal((double) newEntry).compareTo(new BigDecimal((double) lastEntry));
+			if (res == 0)
+				throw new DBAppException("primary key already in database");
+			return res < 0;
+		} else if (newEntry instanceof Date) {
+			res = ((Date) newEntry).compareTo((Date) lastEntry);
+			if(res == 0)
+				throw new DBAppException("primary key already in database");
+			return res < 0;
+		} else 
+			throw new DBAppException("Type not allowed");
 
 	}
-public static boolean minmax(String min, String max, String value, String type) throws ClassNotFoundException, ParseException {
+	public static boolean minmax(String min, String max, String value, String type) throws ClassNotFoundException, ParseException {
 		boolean flag = false;
 		Class x = Class.forName(type);
 		if(x.getSimpleName().equals("Integer")) {
@@ -446,15 +578,28 @@ public static boolean minmax(String min, String max, String value, String type) 
 			Date min2 = new SimpleDateFormat("yyyy-mm-dd").parse(min);
 			Date max2 = new SimpleDateFormat("yyyy-mm-dd").parse(max);
 			Date value2= new SimpleDateFormat("EEE MMM DD HH:mm:ss Z YYYY").parse(value);
-			min2.setHours(0);
-			min2.setSeconds(0);
-			min2.setMinutes(0);
-			max2.setHours(0);
-			max2.setSeconds(0);
-			max2.setMinutes(0);
-			value2.setHours(0);
-			value2.setSeconds(0);
-			value2.setMinutes(0);
+			
+			Calendar calMin = Calendar.getInstance();
+			calMin.setTime(min2);
+			calMin.set(Calendar.HOUR_OF_DAY, 0);
+			calMin.set(Calendar.MINUTE, 0);
+			calMin.set(Calendar.SECOND, 0);
+			min2 = calMin.getTime();
+			
+			Calendar calMax = Calendar.getInstance();
+			calMax.setTime(max2);
+			calMax.set(Calendar.HOUR_OF_DAY, 0);
+			calMax.set(Calendar.MINUTE, 0);
+			calMax.set(Calendar.SECOND, 0);
+			max2 = calMax.getTime();
+			
+			Calendar calVal = Calendar.getInstance();
+			calVal.setTime(value2);
+			calVal.set(Calendar.HOUR_OF_DAY, 0);
+			calVal.set(Calendar.MINUTE, 0);
+			calVal.set(Calendar.SECOND, 0);
+			value2 = calVal.getTime();
+
 			if(value2.compareTo(min2)>=0&&value2.compareTo(max2)<=0) {
 				flag = true;
 			}
@@ -476,41 +621,27 @@ public static boolean minmax(String min, String max, String value, String type) 
 		}
 		return flag;
 	}
-	public static void main(String a[]) throws Exception {
 
-		DBApp dbApp = new DBApp();
-		Hashtable<String, String> htblColNameType = new Hashtable<String, String>();
-		htblColNameType.put("id", "java.lang.Integer");
-		htblColNameType.put("name", "java.lang.String");
-		htblColNameType.put("gpa", "java.lang.Double");
-
-		Hashtable<String, String> htblColNameMin = new Hashtable<String, String>();
-		htblColNameMin.put("id", "0");
-		htblColNameMin.put("name", "A");
-		htblColNameMin.put("gpa", "0.7");
-
-		Hashtable<String, String> htblColNameMax = new Hashtable<String, String>();
-		htblColNameMax.put("id", "10000");
-		htblColNameMax.put("name", "ZZZZZZZZZZZ");
-		htblColNameMax.put("gpa", "12");
+	public static String dateToString(Date d)
+	{
+		String year;
+		String month;
+		String day;
 		
-		try {
-			//dbApp.createTable("Student", "id", htblColNameType, htblColNameMin, htblColNameMax);
-				Hashtable<String, Object> record = new Hashtable<String, Object>();
-				record.put("gpa", 1.0);
-				record.put("name", "name");
-				record.put("id", 20000);
-				dbApp.insertIntoTable("Student", record);
-			
+		year = (d.getYear() + 1900) + "";
 		
-			
-			printTable("Student");
-
-		} catch (DBAppException e) {
-			System.out.println(e.getMessage());
-
-		}
-
+		if((d.getMonth() + 1) < 10)
+			month = "0" + (d.getMonth()+1);
+		else
+			month = d.getMonth() + 1 +"";
+		
+		if(d.getDate() < 10)
+			day = "0" + (d.getDate());
+		else
+			day = d.getDate() + "";
+		
+		return year + "-" + month + "-" + day;
 	}
+	
 
 }
