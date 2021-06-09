@@ -2,7 +2,9 @@ import java.util.regex.Pattern;
 
 public class StringRange 
 {
-	
+	public static void main(String[] args) {
+		System.out.println(next("z-9"));
+	}
 	public String[] range(String min, String max) 
 	{		
 		int rangeDifference = convert26(max)-convert26(min);		
@@ -34,6 +36,7 @@ public class StringRange
 		char aRef = 'a';
 		char ARef = 'A';
 		char zRef = '0';
+
 		for (int i = 0, power = 0; i < x.length(); i++,power++) 
 		{
 			if(Pattern.matches("[A-Z]", x.charAt(i)+""))

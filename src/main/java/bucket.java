@@ -1,10 +1,15 @@
+import java.io.Serializable;
 import java.util.Vector;
 
-public class bucket {
+public class Bucket implements Serializable {
 	
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 5154907430954213847L;
 	public Vector<records> values;
 
-	public bucket (int size) {
+	public Bucket (int size) {
 		values = new Vector<records>(size);
 	}
 	
@@ -18,14 +23,15 @@ public class bucket {
 	public Vector<records> getRecord() {
 		return values;
 	}
-	@Override
 	public String toString() {
-		String str = "";
-		for(records rec: values) {
-			str = str+rec.toString();
-		}
-		return str;
-	}
+        String str = "";
+        for(records rec: values) {
+            str = str+rec.toString();
+        }
+        return str;
+      
+    }
+
 }
 
 
