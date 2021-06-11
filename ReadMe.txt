@@ -1,0 +1,1 @@
+If you want to rerun the system please delete the files inside the data folder as we used a different implementation where each table gets a subfolder instead of having all pages together in the data folder so please delete said subfolders before rerun.
